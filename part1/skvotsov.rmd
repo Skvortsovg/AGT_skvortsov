@@ -1,0 +1,260 @@
+---
+title: 'My VK '
+author: "Skvortsov Grigory"
+date: "June, 2017"
+output:
+  html_document:
+    toc: yes
+  pdf_document:
+    toc: yes
+---
+```{r, warning=FALSE}
+library(igraph)
+library(vkR)
+```
+
+## 1 Your Network Summary
+First of all, we need to read .json the file and build the graph.
+### Network source and preprocessing
+Read our graph from .csv file (How it got described in paragraph 4).
+Remove the loop  and NA elements.
+```{r, warning=FALSE}
+g_t <- read.csv("/home/skv/sna_skvortsov/edgelist.csv", header=FALSE, sep=",")
+graph <- graph.data.frame(g_t, directed=FALSE)
+
+graph <- delete_edges(graph,incident(graph, "NA"))
+graph <- delete_vertices(graph, "NA")
+graph <- simplify(graph, remove.multiple = TRUE, remove.loops = FALSE)
+```
+
+### Node/Edge attributes
+Every edge in the graph has the same weight, that equals to 1. The labels of vertexes are ids of users from VK. 
+
+### Size, Order
+I have 79 friends in vk.com
+```{r}
+vcount(graph) 
+```
+Size
+```{r}
+ecount(graph)
+```
+
+### Gorgeous network layout.
+I built my graph using Gephi (with installed plugin LabelPropagation). The vertex color mainly depends on the community (fot that i used LabelPropogation applet). Size tops helps to estimate the number of edges incoming to this vertex
+![My graph](/home/skv/sna_skvortsov/graph.svg)
+
+
+### Degree distribution, Shortest Path distribution, Diameter, Radius, Clustering Coefficients (local distribution and global)
+
+Let's build PDF and CDF of the degree distribution in log-log scale, as we did it in 4th assignment.
+```{r}
+## get PDF and CDF
+max_degree <- max(degree(graph))
+degree_range <- 1:max_degree
+degree_dist <- degree.distribution(graph, cumulative = FALSE)[degree_range]
+
+## delete zero values
+positive_position <- which(degree_dist  > 0)
+degree_dist <- degree_dist[positive_position]
+degree_range <- degree_range[positive_position]
+cum_degree_range <- degree_range + 1
+compl_cum_degree_range <- cum_degree_range
+
+cum_degree_dist <- cumsum(degree_dist)
+compl_cum_degree_dist <- degree.distribution(graph, cumulative=TRUE)[cum_degree_range]
+compl_cum_degree_dist <- compl_cum_degree_dist[cum_degree_range]
+
+plot(degree_dist, log = "xy", main = "PDF", xlab = "node degree (log)", ylab = "frequency (log)", col="blue")
+plot(cum_degree_dist, log = "xy", main = "CDF", xlab = "node degree (log)", ylab = "frequency (log)", col="blue")
+```
+
+Shortest Path distribution
+```{r}
+barplot(path.length.hist(graph)$res, legend = path.length.hist(graph)$res, main = "Shortest Path Lengths Distribution", col = c("blue", "yellow", "red","green", "pink"),xlab = "Path length", ylab = "The number of paths" )
+```
+
+Dismeter and radius. 
+Diametr is the length of the "longest shortest path", radius is the length of the shortest paths among longest ones.
+
+```{r}
+diameter(graph) 
+radius(graph)
+
+```
+Clustering Coefficients (local distribution and global)
+```{r}
+#LOCAL
+local_cluster <- transitivity(graph, type="local")
+print("local_cluster_coeff")
+local_cluster
+plot(degree(graph), local_cluster, xlab="node degree", ylab="local clustering coefficients", col="blue")
+
+#GLOBAL
+global_cluster <- transitivity(graph, type="global")
+print("global_cluster_coeff")
+global_cluster
+```
+
+
+## 2 Structural Analysis
+
+### Degree/Closeness/Betweenness centralities. Top nodes interpretation
+
+Find these centrality metric
+```{r}
+deg_c <- degree(graph)
+clos_c <- closeness(graph)
+betw_c <- betweenness(graph)
+```
+Lets interpet results. So I chose top-5 nodes for each metric.
+```{r}
+deg_c_ids <- sort(deg_c, decreasing=TRUE)[1:5]
+clos_c_ids <- sort(clos_c, decreasing=TRUE)[1:5]
+betw_c_ids <- sort(betw_c, decreasing=TRUE)[1:5]
+```
+Build a spreadsheet for further analysis
+```{r}
+top_ids <- cbind(names(deg_c_ids), names(clos_c_ids), names(betw_c_ids))
+colnames(top_ids) <- c("Degree", "Closeness", "Betweeness")
+top_ids
+```
+Let's try to interpret the obtained results.
+For all three metrics is leading people with ID 8974997. This is one of my best friends - Sergei Korolev. He is studying at our faculty. He also met my friend from school and with and with people from the company regarding my hobby (from motorcycle club).
+Consider the second results. 
+Degree and closeness centrality metrics leader - 21319001 (Sergey Zamilin) and betweeness metric leader - 129124163 (Seva Moskovkin).
+With Seva we have many mutual friends both from school and from other groups of friends. 
+I believe that the results obtained correspond very well to my expectations.
+
+### Page-Rank. Comparison with centralities
+Find PageRank and get top-5 ids.
+```{r}
+p_r <- page.rank(graph)$vector
+p_r_ids <- sort(p_r, decreasing=TRUE)[1:5]
+p_r_ids
+```
+
+Lets plot followng graphs for analysis. Pay special attention to the graph coloring
+```{r}
+layout_ <- layout.fruchterman.reingold(graph)
+our_colors <- colorRampPalette(list('white','black'))
+
+deg_color <- our_colors(10)[as.numeric(cut(deg_c,breaks=10))]
+plot(graph,layout=layout_, vertex.color=deg_color,
+     vertex.size=deg_c*0.3, vertex.label=NA, main="Degree centrality")
+
+deg_color <- our_colors(100)[as.numeric(cut(clos_c,breaks=100))]
+plot(graph, layout=layout_, vertex.color=deg_color,
+     vertex.size=clos_c*10000, vertex.label=NA, main="Closeness centrality")
+
+deg_color <- our_colors(10)[as.numeric(cut(betw_c,breaks=10))]
+plot(graph, layout=layout_, vertex.color=deg_color,
+     vertex.size=betw_c/100, vertex.label=NA, main="Betweeness centrality")
+
+deg_color <- our_colors(10)[as.numeric(cut(p_r,breaks=10))]
+plot(graph, layout=layout_, vertex.color=deg_color,
+     vertex.size=p_r*200, vertex.label=NA, main="PageRank centrality")
+
+
+```
+
+Hence,
+1. In my vk network there are many nodes with close to zero betweennes centrality.
+2. The PageRank and Degree values are quite similar. (I't predictable, because random walk in PageRank directly depends on the degree of vertex.)
+
+
+### Assortative Mixing according to node attributes
+```{r}
+assortativity_degree(graph, directed = F)
+assortativity(graph, types1=clos_c, types2=NULL, directed=F)
+assortativity(graph, types1=betw_c, types2=NULL, directed=F)
+assortativity(graph, types1=p_r, types2=NULL, directed=F)
+```
+
+### Node structural equivalence/similarity
+```{r}
+sim.matrix <- similarity(graph, method = "dice")
+degCol <- our_colors(10)[as.numeric(cut(sim.matrix,breaks=10))]
+plot(graph, layout=layout_, edge.color=degCol, vertex.color=clos_c,
+     vertex.size=clos_c*20000, vertex.label=NA)
+```
+
+### The closest random graph model similar to your SN
+```{r}
+gr <- erdos.renyi.game(vcount(graph), p.or.m = ecount(graph), type="gnm")
+d <- graph.difference(graph, gr)
+plot(d, layout=layout_,vertex.color=clos_c, vertex.size=clos_c*12000, vertex.label=NA,main="Difference between graphs")
+```
+## 3 Community Detection
+### Search for cliques, hierarchical k-cores
+
+Cliques
+```{r, warning=FALSE}
+largest = largest.cliques(graph)
+
+labels = rep(0, vcount(graph))
+labels[largest[[1]]] = 2
+plot(graph,layout=layout_,vertex.color = labels,
+     vertex.size=clos_c*10000,vertex.label=NA,main="The Biggest clique")
+
+```
+K-core
+```{r}
+coreness <- graph.coreness(graph)
+max_cor <- max(coreness)
+color_bar <- heat.colors(max_cor)
+plot(graph,layout=layout_, vertex.color = color_bar[coreness], vertex.size=clos_c*10000, vertex.label=NA, main="K-core")
+```
+### Best results of various community detection algorithms, at least, hierarchical spectral clustering and modularity optimization should be applied with another TWO algorithms and compared in terms of stability of clustering. You may use communities, graph-tool, etc
+```{r, warning=FALSE}
+edge_bet <- edge.betweenness.community(graph)
+plot(edge_bet, layout=layout_, graph, vertex.color=edge_bet, vertex.size=clos_c*10000, vertex.label=NA, main="Edge Betweenness")
+
+fast_gr <- fastgreedy.community(graph)
+plot(fast_gr, layout=layout_, graph, vertex.color = fast_gr, vertex.size=clos_c*10000, vertex.label=NA,main="FastGreedy")
+```
+## 4 Extracting friendship graph
+
+First of all, I extracted frendsip graph using VK API (more precisely - vkR library)
+
+Firstly, I created application in vk as described in example(https://cs.hse.ru/data/2017/04/04/1168473284/vkR_eng.pdf), after that I authorized and got access_token
+
+```{r}
+app_id <- 6069176
+#vkOAuth(app_id) I commented this string in HTML report.
+ 
+```
+Get friends list:
+```{r}
+access_token <- "d1ce1087a992fffac5eab3413b2a92f0ac11364922f0732c077646d196ea353c09dbe99d50d0363e51277"
+my_vk_id <- 250570961
+setAccessToken(access_token)
+friends <- getFriends(user_id=my_vk_id)
+friends_count <- length(friends$items)
+friends_str <- toString(friends$items)
+```
+
+Get mutual friends.
+```{r}
+mutual_friends <- getMutual(target_uid=0, target_uids=friends_str, offset=0, count=friends_count)
+```
+Parse data and save in csv format (Need for further imaging)
+```{r}
+fr_list <- list()
+
+for (i in 1:friends_count) {
+  if (mutual_friends[["common_count"]][i] != 0) {
+    for (j in 1:(mutual_friends[["common_count"]][i])) {
+      text <- mutual_friends[["id"]][i]
+      text <- paste(text, mutual_friends[[2]][[i]][j], sep=",")
+      fr_list[length(fr_list)+1] <- text
+    }
+  } else {
+    fr_list[length(fr_list)+1] <- mutual_friends[["id"]][i]
+  }
+}
+text1 <- paste0(fr_list, collapse=NULL)
+write(text1, "/home/skv/sna_skvortsov/edgelist_.csv")
+```
+We now turn to the task 1
+
